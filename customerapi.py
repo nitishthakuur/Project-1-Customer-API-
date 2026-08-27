@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from databasefastapi import get_db
 
 router = APIRouter(
@@ -8,22 +8,38 @@ router = APIRouter(
 )
 
 class CustomersCreate(BaseModel):
-    id: int
     phone_number: str = Field(min_length=10,
                               max_length=10
     )
     name: str
-    passward: str = Field(min_length=6,
+    password: str = Field(min_length=6,
                           max_length=10
                           )
 
-
+    @field_validator("phone_number")
+    @classmethod
+    def validate_phone_number(cls, value):
+        if not value.isdigit():
+            raise ValueError("Phone number must contain only digits")
+        return value
+    
 class CustomerUpdate(BaseModel):
     name: str
-    phone_number : str
-    name: str
+    phone_number : str = Field(
+        min_length=10,
+        max_length=10
+    )
+
+    @field_validator("phone_number")
+    @classmethod
+    def vlaidate_phone_number(cls, value):
+        if not value.isdigit():
+            raise ValueError("Phone number must contain digits")
+        return value
 
 class CustomerResponse(BaseModel):
+    id: int
+    phone_number: str
     name: str
 
 
@@ -38,13 +54,12 @@ def create_cust(customer: CustomersCreate, conn=Depends(get_db)):
     cursor = conn.cursor()
 
     cursor.execute("""
-        INSERT INTO Customers(id, phone_number, name, passward)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO Customers(phone_number, name, password)
+        VALUES (?, ?, ?)
     """,(
-        customer.id,
         customer.phone_number,
         customer.name,
-        customer.passward
+        customer.password
     ))
 
     conn.commit()
@@ -70,9 +85,11 @@ def get_cust(conn=Depends(get_db)):
     customers = []
 
     for row in rows:
-        customers.append(
-            {"name": row[2]}
-        )
+        customers.append({
+            "id": row[0],
+            "phone_number": row[1],
+            "name": row[2]
+        })
 
 
     return customers
@@ -81,7 +98,7 @@ def get_cust(conn=Depends(get_db)):
 # Fetch Customer by Id
 #-----------------------------------------------------------
 
-@router.get("/", {id},
+@router.get("/{id}",
             response_model=CustomerResponse
             )
 def get_custm(id: int, conn=Depends(get_db)):
@@ -94,7 +111,15 @@ def get_custm(id: int, conn=Depends(get_db)):
 
     row = cursor.fetchone()
 
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Cusotmer not found"
+        )
+
     return{
+        "id": row[0],
+        "phone_number": row[1],
         "name": row[2]
     }
 
@@ -102,17 +127,18 @@ def get_custm(id: int, conn=Depends(get_db)):
 # Update Customers
 #-----------------------------------------------------------
 
-@router.put("/",{id})
+@router.put("/{id}")
 def update_cust(id: int,customer: CustomerUpdate, conn=Depends(get_db)):
 
     cursor = conn.cursor()
 
     cursor.execute("""
         UPDATE Customers
-        SET name = ?
+        SET name = ?, phone_number = ?
         WHERE id = ?
     """,(
         customer.name,
+        customer.phone_number,
         id
     ))
 
@@ -132,13 +158,13 @@ def update_cust(id: int,customer: CustomerUpdate, conn=Depends(get_db)):
 #Delete Customer
 #-----------------------------------------------------------------
 
-@router.delete("/", {id})
+@router.delete("/{id}")
 def delete_custm(id: int, conn=Depends(get_db)):
 
     cursor = conn.cursor()
 
     cursor.execute("""
-        DELETE Customers
+        DELETE FROM Customers
         WHERE id = ?
     """, (id,))
 
@@ -148,7 +174,9 @@ def delete_custm(id: int, conn=Depends(get_db)):
             detail="Customer not found"
         )
 
+    conn.commit()
+
     return {
-        "message": "Customer not found"
+        "message": "Customer deleted successfully"
     }
 

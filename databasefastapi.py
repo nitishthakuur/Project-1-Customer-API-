@@ -11,11 +11,11 @@ def create_table():
         id INTEGER PRIMARY KEY,
         phone_number TEXT NOT NULL,
         name TEXT NOT NULL,
-        passward TEXT NOT NULL
+        password TEXT NOT NULL
         )
     """)
 
-    conn.commit
+    conn.commit()
     conn.close()
 
 #Provide connection
